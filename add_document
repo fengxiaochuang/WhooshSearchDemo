@@ -1,0 +1,63 @@
+# -*- coding: UTF-8 -*-
+from __future__ import unicode_literals
+import sys
+import os
+import datetime
+from whoosh.index import create_in
+from whoosh.fields import *
+import MySQLdb
+import config
+from jieba.analyse import ChineseAnalyzer
+analyzer = ChineseAnalyzer()
+sys.path.append("../")
+
+schema = Schema(
+    page_id=NUMERIC(),
+    title=TEXT(stored=True, analyzer=analyzer),
+    body=TEXT(analyzer=analyzer),
+    url=ID(stored=True),
+    site_name=ID(stored=True),
+    html_title=TEXT(stored=True),
+    source_site=ID(stored=True),
+    publish_time=DATETIME(stored=True),
+    save_time=DATETIME(stored=True),
+    save_path=TEXT(stored=True)
+)
+if not os.path.exists("html_index"):
+    os.mkdir("html_index")
+
+ix = create_in("html_index", schema)
+writer = ix.writer()
+# fromtimestamp int->time
+# time = 0
+# datetime.datetime.fromtimestamp(time)
+# strptime string->time
+# format = '%Y-%m-%d %H:%M:%S' str = '2015-10-27 15:09:38'
+# datetime.datetime.strptime(str,format)
+
+con = MySQLdb.connect(**config.db_config)
+cur = con.cursor()
+sql = "SELECT * FROM page"
+allcount = cur.execute(sql)
+timeformat = '%Y-%m-%d %H:%M:%S'
+for i in xrange(allcount):
+    row = cur.fetchone()
+    publish_time = datetime.datetime.strptime(row['publish_time'], timeformat)
+    save_time = datetime.datetime.fromtimestamp(row['save_time'])
+    writer.add_document(
+        page_id=row['id'],
+        title=row['title'],
+        body=row['body'],
+        url=row['url'],
+        site_name=row['site_name'],
+        html_title=row['html_title'],
+        source_site=row['source_site'],
+        publish_time=publish_time,
+        save_time=save_time,
+        save_path=row['save_path']
+    )
+    print("inserting the %s rows" % i)
+cur.close()
+con.close()
+writer.commit()
+print("all had inserted!!!")
